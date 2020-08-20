@@ -126,7 +126,7 @@ class EFO:
         efo_to_label['class_id'] = efo_to_label['class_id'].apply(lambda x: x.split('/')[-1])
         efo_to_label = efo_to_label.set_index('class_id')
         
-        def _assign_efo_from_ukb(ukb):
+        def _assign_efo_from_ukb(ukb, what='label'):
             if not isinstance(ukb, list):
                 ukb = [ukb]
             
@@ -142,7 +142,10 @@ class EFO:
                 if efo_code not in efo_to_label.index:
                     return None
             
-                efo_label = efo_to_label.loc[efo_code]['preferred_label']
+                if what == 'label':
+                    efo_label = efo_to_label.loc[efo_code]['preferred_label']
+                elif what == 'code':
+                    efo_label = efo_code
                 
                 efo_terms.append(efo_label)
             
@@ -154,7 +157,10 @@ class EFO:
                 
             return efo_term_df.index[0]
         
-        return df2.assign(efo_name=df2[ukb_code_column].apply(_assign_efo_from_ukb))
+        return df2.assign(
+                efo_code=df2[ukb_code_column].apply(lambda x: _assign_efo_from_ukb(x, what='code')),
+                efo_name=df2[ukb_code_column].apply(lambda x: _assign_efo_from_ukb(x)),
+        )
 
     def assign_efo_label_from_efo_code(self, df, efo_code_column='efo_code', copy=True):
         if copy:
