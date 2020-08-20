@@ -1,11 +1,14 @@
 import os
 import re
 from glob import glob
+from collections import defaultdict
 
 import numpy as np
 from scipy import stats
 import pandas as pd
 
+from utils import simplify_string_for_hdf5
+import settings as conf
 from entity import Trait
 
 
@@ -66,6 +69,20 @@ class PhenoResults:
         self.file_by_tissue = {m.group('tissue'): m.string for m in csv_files_matches}
         self.tissues = [m.group('tissue') for m in csv_files_matches]
 
+        # hdf5
+        hdf5_pattern = re.compile('spredixcan-(?P<tissue>.+)-(?P<column>.+)\.h5')
+        hdf5_files_matches = []
+        for hdf5_f in glob(os.path.join(conf.GENE_ASSOC_DIR, 'spredixcan', '*.h5')):
+            mat = re.search(hdf5_pattern, hdf5_f)
+            if mat is None:
+                continue
+
+            hdf5_files_matches.append(mat)
+
+        self.hdf5_files = defaultdict(dict)
+        for m in hdf5_files_matches:
+            self.hdf5_files[m.group('tissue')][m.group('column')] = m.string
+
     def get_consensus_effect_direction(self, pval_threshold=1e-4):
         def _get_effect_direction(zscores):
             zscores = zscores.dropna()
@@ -116,16 +133,22 @@ class PhenoResults:
         if not isinstance(cols, (tuple, list)):
             cols = [cols]
 
-        tissue_file_path = self.file_by_tissue[tissue]
         squeeze = len(cols) == 1
 
-        df = pd.read_csv(tissue_file_path, usecols=['gene'] + cols)
+        #tissue_file_path = self.file_by_tissue[tissue]
+        #df = pd.read_csv(tissue_file_path, usecols=['gene'] + cols)
 
-        if index_col == 'gene_simple':
-            df = df.assign(gene_simple=df['gene'].apply(lambda x: x.split('.')[0]))
-            df = df.drop(columns=['gene'])
+        # FIXME: only the first column specified is read
+        hdf5_tissue_file_path = self.hdf5_files[tissue][cols[0]]
+        with pd.HDFStore(hdf5_tissue_file_path, mode='r') as store:
+            clean_col = simplify_string_for_hdf5(self.pheno_info.get_plain_name())
+            df = store[clean_col]
 
-        df = df.set_index(index_col)
+        #if index_col == 'gene_simple':
+        #    df = df.assign(gene_simple=df['gene'].apply(lambda x: x.split('.')[0]))
+        #    df = df.drop(columns=['gene'])
+
+        #df = df.set_index(index_col)
         if squeeze:
             df = df.squeeze()
 
